@@ -1,0 +1,127 @@
+<html>
+  <head>
+  </head>
+  <body>
+    <h1>Lobby Prototype</h1>
+    <div id="connection_panel" class="o-panel">
+      <table>
+        <tr>
+          <td>Stun Host:</td>
+          <td><input id='stun_host' type='text' value='stun3.l.google.com:19305'/></td>
+        </tr>
+        <tr>
+          <td>Connection Info:</td>
+          <td><input id="token" type="text" disabled/></td>
+        </tr>
+         <tr>
+          <td>Offer SDP:</td>
+          <td><textarea id="offer" rows="20" cols="120" disabled/></textarea></td>
+        </tr>
+     </table>
+    </div>
+    <div id="user_list_panel" class="o-panel">
+      <h1>User List</h1>
+      <div>
+        <input id="new_user" type="text"/>
+        <button onClick="window.controller.addUser()">Add User</button>
+      </div>
+      <ul></ul>
+    </div>
+    <div id="message_panel" class="o-panel">
+      <h2>Messages</h2>
+      <div>
+        <textarea id="messages" rows="10" cols="40" readonly></textarea>
+      </div>
+      <div>
+        <input id="new_message" type="text">
+        <button onClick="window.controller.sendMessage();">Send</button>
+      </div>
+    </div>
+  </body>
+
+  <script language='JavaScript'>
+
+    class Lobby {
+
+      static Connection  = class {
+        constructor(local, remote) {
+          cosole.log('Connection', local, remote);
+        }
+      }
+
+      constructor() {
+        const configuration = {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]};
+        this.peerConnection = new RTCPeerConnection(configuration);
+        this.channel        = this.peerConnection.createDataChannel('lobbyChannel');
+      }
+
+      awaitToken(callback) {
+        if(this.token) {
+          console.debug('already have token');
+          if(callback) callback(this.token);
+        } else {
+          this.peerConnection.createOffer().then((offer) => {
+            console.debug('received offer', offer);
+            this.peerConnection.setLocalDescription(offer);
+            this.token = btoa(offer.sdp);
+            if(callback) callback(this.token);
+          });
+        }
+      }
+
+      addUser(token) {
+        const sdp = atob(token);
+      }
+
+      sendMessage(message) {
+      }
+
+      onMessage(callback) {
+      }
+
+    } // class Lobby
+
+    class Controller {
+
+      constructor() {
+        this.lobby = new Lobby();
+        this.users = [];
+      }
+
+      start() {
+        this.#generateToken();
+        this.lobby.onMessage(this.#onMessage);
+      }
+
+      addUser(){}
+
+      sendMessage(message){
+        console.debug('sendMessage:', message);
+        this.lobby.sendMessage(message);
+      }
+
+
+    // private functions
+
+      #generateToken() {
+        this.lobby.awaitToken(this.#setToken);
+      }
+
+      #setToken(token) {
+        console.debug('setting token to ', token);
+        document.getElementById('token').value = token;
+        document.getElementById('offer').value = atob(token);
+      }
+
+      #onMessage(message) {
+        console.log('onMessage', message);
+      }
+
+
+    } // class Controller
+
+    window.controller = new Controller();
+    window.controller.start();
+
+  </script>
+</html>
