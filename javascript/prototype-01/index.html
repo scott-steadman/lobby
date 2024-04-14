@@ -60,11 +60,19 @@
           console.debug('already have token');
           if(callback) callback(this.token);
         } else {
-          this.peerConnection.createOffer().then((offer) => {
-            console.debug('received offer', offer);
+
+            this.peerConnection.createOffer().then((offer) => {
+
+            this.peerConnection.addEventListener('icecandidate', (event) => {
+              // Wait for all candidates to be gathered
+              if(!event.candidate) {
+                const offerSDP = this.peerConnection.localDescription.sdp;
+                this.token = btoa(offerSDP);
+                if(callback) callback(this.token);
+              }
+            });
+
             this.peerConnection.setLocalDescription(offer);
-            this.token = btoa(offer.sdp);
-            if(callback) callback(this.token);
           });
         }
       }
@@ -110,6 +118,7 @@
       #setToken(token) {
         console.debug('setting token to ', token);
         document.getElementById('token').value = token;
+        // let me see the raw offer
         document.getElementById('offer').value = atob(token);
       }
 
