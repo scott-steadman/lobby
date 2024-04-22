@@ -2,31 +2,41 @@
   <head>
   </head>
   <body>
-    <h1>Lobby Prototype</h1>
-    <div id="connection_panel" class="o-panel">
-      <table>
+    <h1>Connection Prototype</h1>
+    <div id="offer_panel" class="o-panel">
+      <button id='offer_token_button' onClick="window.controller.generateToken();">Generate Token</button>
+      <table id='offer_token_table' style="display:none">
         <tr>
-          <td>Stun Host:</td>
-          <td><input id='stun_host' type='text' value='stun3.l.google.com:19305'/></td>
+          <td>Offer Token:</td>
+          <td><input id="offer_token" type="text" disabled/> (copy/paste to send this to host)</td>
         </tr>
-        <tr>
-          <td>Connection Info:</td>
-          <td><input id="token" type="text" disabled/></td>
-        </tr>
-         <tr>
+        <tr style="display:none">
           <td>Offer SDP:</td>
-          <td><textarea id="offer" rows="20" cols="120" disabled/></textarea></td>
+          <td><textarea id="raw_offer" rows="20" cols="120" disabled/></textarea></td>
         </tr>
      </table>
+     <div>
+        <span id="accept_offer">
+          <input id="offer" type="text"/>
+          <button onClick="window.controller.acceptOffer()">Accept Offer</button>
+        </span>
+        <span id="answer_offer" style="visibility:hidden">
+          <input id="answer_token" type="text" disabled/>
+          (copy/paste to send this to client)<br/>
+        </span>
+        <div style="display:none">
+          Answer SDP:
+          <textarea id="raw_answer" rows="20" cols="120" disabled/></textarea>
+        </div>
+     </div>
+    <hr/>
+    <div id="answer_panel" class="o-panel">
+      <span id="accept_answer">
+        <input id="answer" type="text"/>
+        <button onClick="window.controller.acceptAnswer()">Accept Answer</button>
+      </span>
     </div>
-    <div id="user_list_panel" class="o-panel">
-      <h1>User List</h1>
-      <div>
-        <input id="new_user" type="text"/>
-        <button onClick="window.controller.addUser()">Add User</button>
-      </div>
-      <ul></ul>
-    </div>
+    <hr/>
     <div id="message_panel" class="o-panel">
       <h2>Messages</h2>
       <div>
@@ -41,91 +51,207 @@
 
   <script language='JavaScript'>
 
-    class Lobby {
-
-      static Connection  = class {
-        constructor(local, remote) {
-          cosole.log('Connection', local, remote);
-        }
-      }
+    class Connection {
 
       constructor() {
-        const configuration = {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]};
+        const debugEnabled = false;
+        const configuration = { iceServers: [{'urls': [
+                                                        'stun:stun.l.google.com:19302',
+                                                      ]
+                                            }],
+                              };
+
         this.peerConnection = new RTCPeerConnection(configuration);
-        this.channel        = this.peerConnection.createDataChannel('lobbyChannel');
+
+        if(debugEnabled) {
+          this.peerConnection.addEventListener('addstream', this.dumpEvent);
+          this.peerConnection.addEventListener('connectionstatechange', this.dumpEvent);
+          this.peerConnection.addEventListener('datachannel', this.dumpEvent);
+          this.peerConnection.addEventListener('icecandidate', this.dumpEvent);
+          this.peerConnection.addEventListener('icecandidateerror', this.dumpEvent);
+          this.peerConnection.addEventListener('iceconnectionstatechange', this.dumpEvent);
+          this.peerConnection.addEventListener('icegatheringstatechange', this.dumpEvent);
+          this.peerConnection.addEventListener('negotiationneeded', this.dumpEvent);
+          this.peerConnection.addEventListener('removestream', this.dumpEvent);
+          this.peerConnection.addEventListener('signalingstatechange', this.dumpEvent);
+          this.peerConnection.addEventListener('track', this.dumpEvent);
+        }
+
+        // called when a datachannel is added by the other peer
+        this.peerConnection.addEventListener('datachannel', (event) => {
+          this.channel = event.channel;
+        });
+
+        this.channel = this.peerConnection.createDataChannel('connectionChannel', {reliable: true});
+
+        if(debugEnabled) {
+          this.channel.addEventListener('bufferedamountlow', this.dumpEvent)
+          this.channel.addEventListener('close', this.dumpEvent)
+          this.channel.addEventListener('closing', this.dumpEvent)
+          this.channel.addEventListener('error', this.dumpEvent)
+          this.channel.addEventListener('message', this.dumpEvent)
+          this.channel.addEventListener('open', this.dumpEvent)
+        }
+
+        this.channel.addEventListener('open', (event) => {
+          document.getElementById('messages').value = '**Channel Opened.\n';
+        });
+
+        this.channel.addEventListener('closing', (event) => {
+          document.getElementById('messages').value += '**Channel Closing...\n';
+        });
+
+        this.channel.addEventListener('closed', (event) => {
+          document.getElementById('messages').value += '**Channel Closed.\n';
+        });
+
+
+      }
+
+      dumpEvent(event) {
+        console.log('Connection.dumpEvent:', event);
       }
 
       awaitToken(callback) {
         if(this.token) {
-          console.debug('already have token');
+          console.debug('Connection.awaitToken: already have token');
           if(callback) callback(this.token);
-        } else {
-
-            this.peerConnection.createOffer().then((offer) => {
-
-            this.peerConnection.addEventListener('icecandidate', (event) => {
-              // Wait for all candidates to be gathered
-              if(!event.candidate) {
-                const offerSDP = this.peerConnection.localDescription.sdp;
-                this.token = btoa(offerSDP);
-                if(callback) callback(this.token);
-              }
-            });
-
-            this.peerConnection.setLocalDescription(offer);
-          });
+          return;
         }
+
+        this.peerConnection.createOffer().then((offer) => {
+
+          // now that we've created our offer we need to wait for the browser to gather all the candidates.
+          const handler = (event) => {
+                            const newState = event.target.iceGatheringState;
+                            console.log('Connection.awaitToken iceGatheringState:', newState);
+                            switch(newState) {
+                              case 'complete':
+                                const offerSDP = this.peerConnection.localDescription.sdp;
+                                console.log('Connection.awaitToken offer:', offerSDP);
+
+                                this.token = btoa(offerSDP);
+                                if(callback) callback(this.token);
+
+                                this.peerConnection.removeEventListener('icegatheringstatechange', handler);
+                                break;
+                              default:
+                                console.log('Connection.awaitToken unhandled iceGatheringState:', newState);
+                            }
+                          };
+          this.peerConnection.addEventListener('icegatheringstatechange', handler);
+
+          this.peerConnection.setLocalDescription(offer);
+        });
       }
 
-      addUser(token) {
+      acceptOffer(token, callback) {
         const sdp = atob(token);
+        console.log('Connection.acceptOffer offer:', sdp);
+
+        this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'offer', sdp: sdp}));
+        this.peerConnection.createAnswer().then((answer) => {
+          // now that we've created our answer we need to wait for the browser to gather all the candidates.
+          const handler = (event) => {
+                            const newState = event.target.iceGatheringState;
+                            switch(newState) {
+                              case 'complete':
+                                const answerSDP = this.peerConnection.localDescription.sdp;
+                                console.log('Connection.acceptOffer answer:', answerSDP);
+
+                                if(callback) callback(btoa(answerSDP));
+
+                                this.peerConnection.removeEventListener('icegatheringstatechange', handler);
+                                break;
+                              default:
+                                console.log('Connection.acceptOffer unhandled iceGatheringState:', newState);
+                            }
+                          };
+          this.peerConnection.addEventListener('icegatheringstatechange', handler);
+
+          this.peerConnection.setLocalDescription(answer);
+        });
+      }
+
+      acceptAnswer(token, callback) {
+        const sdp = atob(token);
+        console.log('Connection.acceptAnswer answer:', sdp);
+        this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'answer', sdp: sdp}));
       }
 
       sendMessage(message) {
+        const data = {
+          message: message,
+          timestamp: new Date().toISOString()
+        };
+        this.channel.send(JSON.stringify(data));
       }
 
       onMessage(callback) {
+        this.channel.addEventListener('message', (event) => {
+          console.log('Connection.onMessage:', event);
+          const data = JSON.parse(event.data);
+          if(callback) callback(data);
+        });
       }
 
-    } // class Lobby
+    } // class Connection
 
     class Controller {
 
       constructor() {
-        this.lobby = new Lobby();
+        this.connection = new Connection();
         this.users = [];
       }
 
       start() {
-        this.#generateToken();
-        this.lobby.onMessage(this.#onMessage);
+        this.connection.onMessage(this.#onMessage);
+        this.generateToken();
       }
 
-      addUser(){}
+      generateToken() {
+        this.connection.awaitToken(this.#setOfferToken);
+      }
 
-      sendMessage(message){
+      acceptOffer() {
+        this.connection.acceptOffer(document.getElementById('offer').value, this.#setAnswerToken);
+      }
+
+      acceptAnswer() {
+        this.connection.acceptAnswer(document.getElementById('answer').value, this.#setAnswerToken);
+      }
+
+      sendMessage(){
+        const message = document.getElementById('new_message').value;
+        document.getElementById('new_message').value = '';
         console.debug('sendMessage:', message);
-        this.lobby.sendMessage(message);
+        document.getElementById('messages').value += `Me: ${message}\n`;
+        this.connection.sendMessage(message);
       }
-
 
     // private functions
 
-      #generateToken() {
-        this.lobby.awaitToken(this.#setToken);
+      #setOfferToken(token) {
+        console.debug('offer token:', token);
+        document.getElementById('offer_token_button').style.display = 'none';
+        document.getElementById('offer_token_table').style.display = 'block';
+        document.getElementById('offer_token').value = token;
+        // let me see the raw offer
+        document.getElementById('raw_offer').value = atob(token);
       }
 
-      #setToken(token) {
-        console.debug('setting token to ', token);
-        document.getElementById('token').value = token;
-        // let me see the raw offer
-        document.getElementById('offer').value = atob(token);
+      #setAnswerToken(token) {
+        console.debug('answer token:', token);
+        document.getElementById('answer_offer').style.visibility = 'visible';
+        document.getElementById('answer_token').value = token;
+        // let me see the raw answer
+        document.getElementById('raw_answer').value = atob(token);
       }
 
       #onMessage(message) {
-        console.log('onMessage', message);
+        console.log('Controller.#onMessage', message);
+        document.getElementById('messages').value += `They: ${message.message} ${message.timestamp}\n`;
       }
-
 
     } // class Controller
 
