@@ -113,15 +113,8 @@
       }
 
       awaitToken(callback) {
-        if(this.token) {
-          console.debug('Connection.awaitToken: already have token');
-          if(callback) callback(this.token);
-          return;
-        }
-
         this.peerConnection.createOffer().then((offer) => {
-
-          // now that we've created our offer we need to wait for the browser to gather all the candidates.
+          // wait for the browser to gather all the candidates.
           const handler = (event) => {
                             const newState = event.target.iceGatheringState;
                             console.log('Connection.awaitToken iceGatheringState:', newState);
@@ -130,8 +123,7 @@
                                 const offerSDP = this.peerConnection.localDescription.sdp;
                                 console.log('Connection.awaitToken offer:', offerSDP);
 
-                                this.token = btoa(offerSDP);
-                                if(callback) callback(this.token);
+                                if(callback) callback(btoa(offerSDP));
 
                                 this.peerConnection.removeEventListener('icegatheringstatechange', handler);
                                 break;
@@ -151,7 +143,7 @@
 
         this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'offer', sdp: sdp}));
         this.peerConnection.createAnswer().then((answer) => {
-          // now that we've created our answer we need to wait for the browser to gather all the candidates.
+          // wait for the browser to gather all the candidates.
           const handler = (event) => {
                             const newState = event.target.iceGatheringState;
                             switch(newState) {
