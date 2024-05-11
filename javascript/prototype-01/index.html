@@ -61,6 +61,7 @@
                                             }],
                               };
 
+        this.protocolVersion = 1;
         this.peerConnection = new RTCPeerConnection(configuration);
 
         if(debugEnabled) {
@@ -121,7 +122,7 @@
                                 const request = this.peerConnection.localDescription.sdp;
                                 console.log('Connection.createRequest request:', request);
 
-                                if(callback) callback(request);
+                                if(callback) callback({version: this.protocolVersion, request});
 
                                 this.peerConnection.removeEventListener('icegatheringstatechange', handler);
                                 break;
@@ -138,7 +139,7 @@
       acceptRequest(request, callback) {
         console.log('Connection.acceptRequest request:', request);
 
-        this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'offer', sdp: request}));
+        this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'offer', sdp: request.request}));
         this.peerConnection.createAnswer().then((answer) => {
           // wait for the browser to gather all the candidates.
           const handler = (event) => {
@@ -148,7 +149,7 @@
                                 const response = this.peerConnection.localDescription.sdp;
                                 console.log('Connection.acceptRequest response:', response);
 
-                                if(callback) callback(response);
+                                if(callback) callback({version: this.protocolVersion, response});
 
                                 this.peerConnection.removeEventListener('icegatheringstatechange', handler);
                                 break;
@@ -164,7 +165,7 @@
 
       acceptResponse(response) {
         console.log('Connection.acceptResponse response:', response);
-        this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'answer', sdp: response}));
+        this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'answer', sdp: response.response}));
       }
 
       sendMessage(message) {
@@ -201,12 +202,12 @@
       }
 
       acceptRequest() {
-        const request = atob(document.getElementById('request_to_accept').value);
+        const request = JSON.parse(atob(document.getElementById('request_to_accept').value));
         this.connection.acceptRequest(request, this.#requestAccepted);
       }
 
       acceptResponse() {
-        const response = atob(document.getElementById('response_to_accept').value);
+        const response = JSON.parse(atob(document.getElementById('response_to_accept').value));
         this.connection.acceptResponse(response);
       }
 
@@ -224,13 +225,13 @@
         console.debug('Controller.#requestCreated', request);
         document.getElementById('create_request_button').style.display = 'none';
         document.getElementById('request_table').style.display = 'block';
-        document.getElementById('connection_request').value = btoa(request);
+        document.getElementById('connection_request').value = btoa(JSON.stringify(request));
       }
 
       #requestAccepted(response) {
         console.debug('Controller.#requestAccepted:', response);
         document.getElementById('request_response').style.visibility = 'visible';
-        document.getElementById('response_to_send').value = btoa(response);
+        document.getElementById('response_to_send').value = btoa(JSON.stringify(response));
       }
 
       #onMessage(message) {
