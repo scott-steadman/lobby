@@ -3,40 +3,40 @@
   </head>
   <body>
     <h1>Connection Prototype</h1>
-    <div id="offer_panel" class="o-panel">
-      <button id='offer_token_button' onClick="window.controller.generateToken();">Generate Token</button>
-      <table id='offer_token_table' style="display:none">
+
+    <div id="create_request_panel" class="o-panel">
+      <button id='create_request_button' onClick="window.controller.createRequest();">Create Connection Request</button>
+      <table id='request_table' style="display:none">
         <tr>
-          <td>Offer Token:</td>
-          <td><input id="offer_token" type="text" disabled/> (copy/paste to send this to host)</td>
-        </tr>
-        <tr style="display:none">
-          <td>Offer SDP:</td>
-          <td><textarea id="raw_offer" rows="20" cols="120" disabled/></textarea></td>
+          <td>Connection Request:</td>
+          <td><input id="connection_request" type="text" disabled/> (copy and send this to host)</td>
         </tr>
      </table>
-     <div>
-        <span id="accept_offer">
-          <input id="offer" type="text"/>
-          <button onClick="window.controller.acceptOffer()">Accept Offer</button>
-        </span>
-        <span id="answer_offer" style="visibility:hidden">
-          <input id="answer_token" type="text" disabled/>
-          (copy/paste to send this to client)<br/>
-        </span>
-        <div style="display:none">
-          Answer SDP:
-          <textarea id="raw_answer" rows="20" cols="120" disabled/></textarea>
-        </div>
-     </div>
+    </div>
+
     <hr/>
-    <div id="answer_panel" class="o-panel">
-      <span id="accept_answer">
-        <input id="answer" type="text"/>
-        <button onClick="window.controller.acceptAnswer()">Accept Answer</button>
+
+    <div>
+      <span id="accept_request_panel">
+        <input id="request_to_accept" type="text"/>
+        <button onClick="window.controller.acceptRequest()">Accept Request</button>
+      </span>
+      <span id="request_response" style="visibility:hidden">
+        <input id="response_to_send" type="text" disabled/> (copy and send this to client)<br/>
       </span>
     </div>
+
     <hr/>
+
+    <div id="accept_response_panel" class="o-panel">
+      <span id="accept_response">
+        <input id="response_to_accept" type="text"/>
+        <button onClick="window.controller.acceptResponse()">Accept Response</button>
+      </span>
+    </div>
+
+    <hr/>
+
     <div id="message_panel" class="o-panel">
       <h2>Messages</h2>
       <div>
@@ -104,31 +104,29 @@
         this.channel.addEventListener('closed', (event) => {
           document.getElementById('messages').value += '**Channel Closed.\n';
         });
-
-
-      }
+      } // constructor
 
       dumpEvent(event) {
         console.log('Connection.dumpEvent:', event);
       }
 
-      awaitToken(callback) {
+      createRequest(callback) {
         this.peerConnection.createOffer().then((offer) => {
           // wait for the browser to gather all the candidates.
           const handler = (event) => {
                             const newState = event.target.iceGatheringState;
-                            console.log('Connection.awaitToken iceGatheringState:', newState);
+                            console.log('Connection.createRequest iceGatheringState:', newState);
                             switch(newState) {
                               case 'complete':
                                 const offerSDP = this.peerConnection.localDescription.sdp;
-                                console.log('Connection.awaitToken offer:', offerSDP);
+                                console.log('Connection.createRequest offer:', offerSDP);
 
-                                if(callback) callback(btoa(offerSDP));
+                                if(callback) callback(offerSDP);
 
                                 this.peerConnection.removeEventListener('icegatheringstatechange', handler);
                                 break;
                               default:
-                                console.log('Connection.awaitToken unhandled iceGatheringState:', newState);
+                                console.log('Connection.createRequest unhandled iceGatheringState:', newState);
                             }
                           };
           this.peerConnection.addEventListener('icegatheringstatechange', handler);
@@ -137,9 +135,9 @@
         });
       }
 
-      acceptOffer(token, callback) {
+      acceptRequest(token, callback) {
         const sdp = atob(token);
-        console.log('Connection.acceptOffer offer:', sdp);
+        console.log('Connection.acceptRequest request:', sdp);
 
         this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'offer', sdp: sdp}));
         this.peerConnection.createAnswer().then((answer) => {
@@ -149,14 +147,14 @@
                             switch(newState) {
                               case 'complete':
                                 const answerSDP = this.peerConnection.localDescription.sdp;
-                                console.log('Connection.acceptOffer answer:', answerSDP);
+                                console.log('Connection.acceptRequest answer:', answerSDP);
 
                                 if(callback) callback(btoa(answerSDP));
 
                                 this.peerConnection.removeEventListener('icegatheringstatechange', handler);
                                 break;
                               default:
-                                console.log('Connection.acceptOffer unhandled iceGatheringState:', newState);
+                                console.log('Connection.acceptRequest unhandled iceGatheringState:', newState);
                             }
                           };
           this.peerConnection.addEventListener('icegatheringstatechange', handler);
@@ -165,9 +163,9 @@
         });
       }
 
-      acceptAnswer(token, callback) {
+      acceptResponse(token, callback) {
         const sdp = atob(token);
-        console.log('Connection.acceptAnswer answer:', sdp);
+        console.log('Connection.acceptResponse answer:', sdp);
         this.peerConnection.setRemoteDescription(new RTCSessionDescription({type: 'answer', sdp: sdp}));
       }
 
@@ -198,19 +196,19 @@
 
       start() {
         this.connection.onMessage(this.#onMessage);
-        this.generateToken();
+        this.createRequest();
       }
 
-      generateToken() {
-        this.connection.awaitToken(this.#setOfferToken);
+      createRequest() {
+        this.connection.createRequest(this.#requestCreated);
       }
 
-      acceptOffer() {
-        this.connection.acceptOffer(document.getElementById('offer').value, this.#setAnswerToken);
+      acceptRequest() {
+        this.connection.acceptRequest(document.getElementById('request_to_accept').value, this.#setAnswerToken);
       }
 
-      acceptAnswer() {
-        this.connection.acceptAnswer(document.getElementById('answer').value, this.#setAnswerToken);
+      acceptResponse() {
+        this.connection.acceptResponse(document.getElementById('response_to_accept').value, this.#setAnswerToken);
       }
 
       sendMessage(){
@@ -223,21 +221,18 @@
 
     // private functions
 
-      #setOfferToken(token) {
-        console.debug('offer token:', token);
-        document.getElementById('offer_token_button').style.display = 'none';
-        document.getElementById('offer_token_table').style.display = 'block';
-        document.getElementById('offer_token').value = token;
-        // let me see the raw offer
-        document.getElementById('raw_offer').value = atob(token);
+      #requestCreated(request) {
+        const token = btoa(request);
+        console.debug('connection request:', token);
+        document.getElementById('create_request_button').style.display = 'none';
+        document.getElementById('request_table').style.display = 'block';
+        document.getElementById('connection_request').value = token;
       }
 
       #setAnswerToken(token) {
         console.debug('answer token:', token);
-        document.getElementById('answer_offer').style.visibility = 'visible';
-        document.getElementById('answer_token').value = token;
-        // let me see the raw answer
-        document.getElementById('raw_answer').value = atob(token);
+        document.getElementById('request_response').style.visibility = 'visible';
+        document.getElementById('response_to_send').value = token;
       }
 
       #onMessage(message) {
