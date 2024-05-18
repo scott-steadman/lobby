@@ -49,7 +49,6 @@
     class Connection {
 
       constructor() {
-        const debugEnabled = false;
         const configuration = { iceServers: [{'urls': [
                                                         'stun:stun.l.google.com:19302',
                                                       ]
@@ -59,7 +58,8 @@
         this.protocolVersion = 1;
         this.peerConnection = new RTCPeerConnection(configuration);
 
-        if(debugEnabled) {
+        this.debugEnabled = false;
+        if(this.debugEnabled) {
           this.peerConnection.addEventListener('addstream', this.dumpEvent);
           this.peerConnection.addEventListener('connectionstatechange', this.dumpEvent);
           this.peerConnection.addEventListener('datachannel', this.dumpEvent);
@@ -75,12 +75,18 @@
 
         // called when a datachannel is added by the other peer
         this.peerConnection.addEventListener('datachannel', (event) => {
+          console.log('datachannel event:', event);
           this.channel = event.channel;
+          this.#addChannelListeners();
         });
 
         this.channel = this.peerConnection.createDataChannel('connectionChannel', {reliable: true});
+        this.#addChannelListeners();
 
-        if(debugEnabled) {
+     } // constructor
+
+      #addChannelListeners() {
+        if(this.debugEnabled) {
           this.channel.addEventListener('bufferedamountlow', this.dumpEvent)
           this.channel.addEventListener('close', this.dumpEvent)
           this.channel.addEventListener('closing', this.dumpEvent)
@@ -90,17 +96,26 @@
         }
 
         this.channel.addEventListener('open', (event) => {
+          console.log('channel open:', event);
           document.getElementById('messages').value = '**Channel Opened.\n';
         });
 
+        this.channel.addEventListener('message', (event) => {
+          console.log('Connection.onMessage:', event);
+          const data = JSON.parse(event.data);
+          if(this.onMessageCallback) this.onMessageCallback(data);
+        });
+
         this.channel.addEventListener('closing', (event) => {
+          console.log('channel closing:', event);
           document.getElementById('messages').value += '**Channel Closing...\n';
         });
 
         this.channel.addEventListener('closed', (event) => {
+          console.log('channel closed:', event);
           document.getElementById('messages').value += '**Channel Closed.\n';
         });
-      } // constructor
+      }
 
       dumpEvent(event) {
         console.log('Connection.dumpEvent:', event);
@@ -172,11 +187,7 @@
       }
 
       onMessage(callback) {
-        this.channel.addEventListener('message', (event) => {
-          console.log('Connection.onMessage:', event);
-          const data = JSON.parse(event.data);
-          if(callback) callback(data);
-        });
+        this.onMessageCallback = callback;
       }
 
     } // class Connection
