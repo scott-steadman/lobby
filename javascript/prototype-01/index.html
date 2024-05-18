@@ -4,13 +4,10 @@
   <body>
     <h1>Connection Prototype</h1>
 
-    <div id="create_request_panel" class="o-panel">
+    <div id="create_request_panel">
       <button id='create_request_button' onClick="window.controller.createRequest();">Create Connection Request</button>
-      <table id='request_table' style="display:none">
-        <tr>
-          <td>Connection Request:</td>
-          <td><input id="connection_request" type="text" disabled/> (copy and send this to host)</td>
-        </tr>
+      <span id='request_span' style="display:none;">
+        Copy join token image and send to host: <img id="connection_request_img"/>
      </table>
     </div>
 
@@ -18,26 +15,24 @@
 
     <div>
       <span id="accept_request_panel">
-        <input id="request_to_accept" type="text"/>
-        <button onClick="window.controller.acceptRequest()">Accept Request</button>
+        Paste join token image here: <input id="request_to_accept" size="1" style="border:2px solid black"/>
       </span>
       <span id="request_response" style="visibility:hidden">
-        <input id="response_to_send" type="text" disabled/> (copy and send this to client)<br/>
+        Copy this accept token and send to participant: <img id="response_to_send_img"/>
       </span>
     </div>
 
     <hr/>
 
-    <div id="accept_response_panel" class="o-panel">
+    <div id="accept_response_panel">
       <span id="accept_response">
-        <input id="response_to_accept" type="text"/>
-        <button onClick="window.controller.acceptResponse()">Accept Response</button>
+        Paste accept token image here: <input id="response_to_accept"  size="1" style="border:2px solid black"/>
       </span>
     </div>
 
     <hr/>
 
-    <div id="message_panel" class="o-panel">
+    <div id="message_panel">
       <h2>Messages</h2>
       <div>
         <textarea id="messages" rows="10" cols="40" readonly></textarea>
@@ -186,6 +181,59 @@
 
     } // class Connection
 
+    class Utils {
+
+      static encodeToBMP(text) {
+          let canvas = document.createElement('canvas');
+          let ctx = canvas.getContext('2d');
+          let width = Math.ceil(Math.sqrt(text.length));
+          let height = Math.ceil(text.length / width);
+          canvas.width = width;
+          canvas.height = height;
+          let imageData = ctx.createImageData(width, height);
+          for (let i = 0; i < text.length; i++) {
+              let code = text.charCodeAt(i);
+              let x = i % width;
+              let y = Math.floor(i / width);
+              let index = (y * width + x) * 4;
+              imageData.data[index] = code >> 8; // High byte
+              imageData.data[index + 1] = code & 0xFF; // Low byte
+              imageData.data[index + 2] = 0; // Green channel
+              imageData.data[index + 3] = 255; // Alpha channel
+          }
+          ctx.putImageData(imageData, 0, 0);
+          return canvas.toDataURL();
+      }
+
+      static decodeFromBMP(dataURL) {
+        return new Promise((resolve, reject) => {
+            let img = new Image();
+            img.onload = function() {
+                let canvas = document.createElement('canvas');
+                let ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                let imageData = ctx.getImageData(0, 0, img.width, img.height);
+                let text = '';
+                for (let y = 0; y < img.height; y++) {
+                    for (let x = 0; x < img.width; x++) {
+                        let index = (y * img.width + x) * 4;
+                        let code = (imageData.data[index] << 8) | imageData.data[index + 1];
+                        if (code !== 0) { // Ignore padding
+                            text += String.fromCharCode(code);
+                        }
+                    }
+                }
+                resolve(text);
+            };
+            img.onerror = reject;
+            img.src = dataURL;
+        });
+      }
+
+    } // class Utils
+
     class Controller {
 
       constructor() {
@@ -193,21 +241,69 @@
       }
 
       start() {
+        this.#bindElements()
         this.connection.onMessage(this.#onMessage);
         this.createRequest();
       }
 
-      createRequest() {
-        this.connection.createRequest(this.#requestCreated);
+      #bindElements() {
+        this.#bindReqestToAcceptPaste();
+        this.#bindResponseToAcceptPaste();
       }
 
-      acceptRequest() {
-        const request = JSON.parse(atob(document.getElementById('request_to_accept').value));
+      #bindReqestToAcceptPaste() {
+        document.getElementById('request_to_accept').addEventListener('paste', (event) => {
+          console.log('request_to_accept paste:', event);
+
+          for(const item of event.clipboardData.items) {
+            console.log('item:', item);
+
+            if(item.type.startsWith('image')) {
+              const blob = item.getAsFile();
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                Utils.decodeFromBMP(event.target.result).then((text) => {
+                  this.acceptRequest(text);
+                });
+              };
+              reader.readAsDataURL(blob);
+            }
+          }
+        });
+      }
+
+      #bindResponseToAcceptPaste() {
+        document.getElementById('response_to_accept').addEventListener('paste', (event) => {
+          console.log('response_to_accept paste:', event);
+
+          for(const item of event.clipboardData.items) {
+            console.log('item:', item);
+
+            if(item.type.startsWith('image')) {
+              const blob = item.getAsFile();
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                Utils.decodeFromBMP(event.target.result).then((text) => {
+                  this.acceptResponse(text);
+                });
+              };
+              reader.readAsDataURL(blob);
+            }
+          }
+        });
+      }
+
+      createRequest() {
+        this.connection.createRequest(this.#requestCreated.bind(this));
+      }
+
+      acceptRequest(text) {
+        const request = JSON.parse(text);
         this.connection.acceptRequest(request, this.#requestAccepted);
       }
 
-      acceptResponse() {
-        const response = JSON.parse(atob(document.getElementById('response_to_accept').value));
+      acceptResponse(text) {
+        const response = JSON.parse(text);
         this.connection.acceptResponse(response);
       }
 
@@ -224,14 +320,15 @@
       #requestCreated(request) {
         console.debug('Controller.#requestCreated', request);
         document.getElementById('create_request_button').style.display = 'none';
-        document.getElementById('request_table').style.display = 'block';
-        document.getElementById('connection_request').value = btoa(JSON.stringify(request));
+        document.getElementById('request_span').style.display = 'block';
+        document.getElementById('connection_request_img').src = Utils.encodeToBMP(JSON.stringify(request));
       }
 
       #requestAccepted(response) {
         console.debug('Controller.#requestAccepted:', response);
+        document.getElementById('accept_request_panel').style.display = 'none';
         document.getElementById('request_response').style.visibility = 'visible';
-        document.getElementById('response_to_send').value = btoa(JSON.stringify(response));
+        document.getElementById('response_to_send_img').src = Utils.encodeToBMP(JSON.stringify(response));
       }
 
       #onMessage(message) {
