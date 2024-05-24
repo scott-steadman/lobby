@@ -236,6 +236,7 @@ return null;
       }
 
       sendMessage(message) {
+        console.log('Connection.sendMessage:', this.channel.id, message);
         const data = {
           message: message,
           timestamp: new Date().toISOString()
@@ -274,8 +275,32 @@ return this;
         return this;
       }
 
+      /*
+       * TODO: See about implementing these callbacks as event listeners
+       *
+       * Perhaps the following:
+       *  addOnOpenCallback(callback)
+       *  addEventListener('open', callback)
+       *
+       */
+      addOnOpenCallback(callback) {
+        this.onOpenCallback = callback;
+      }
+
       onMessage(callback) {
         this.onMessageCallback = callback;
+      }
+
+      onDisconnect(callback) {
+        this.onDisconnectCallback = callback;
+      }
+
+      onReconnect(callback) {
+        this.onReconnectCallback = callback;
+      }
+
+      onClose(callback) {
+        this.onCloseCallback = callback;
       }
 
     } // class Connection
@@ -354,7 +379,11 @@ return this;
           this.connection = new Connection();
         }
 
+        this.connection.addOnOpenCallback(this.#onConnectionOpen);
         this.connection.onMessage(this.#onConnectionMessage);
+        this.connection.onDisconnect(this.#onConnectionDisconnect);
+        this.connection.onReconnect(this.#onConnectionReconnect);
+        this.connection.onClose(this.#onConnectionClose);
       }
 
       #bindElements() {
@@ -438,10 +467,35 @@ return this;
 
     // private functions
 
+      #onConnectionOpen(connection) {
+        console.log('Controller.#onConnectionOpen');
+        document.getElementById('messages').value = '**Connection Opened.\n';
 
-      #onMessage(message) {
-        console.log('Controller.#onMessage', message);
+        const store = new BrowserConnectionStore();
+        store.saveConnection(connection);
+      }
+
+      #onConnectionMessage(message) {
+        console.log('Controller.#onConnectionMessage', message);
         document.getElementById('messages').value += `They: ${message.message} ${message.timestamp}\n`;
+      }
+
+      #onConnectionDisconnect(connection) {
+        console.log('Controller.#onConnectionDisconnect');
+        document.getElementById('messages').value += '**Connection Disconnected.\n';
+      }
+
+      #onConnectionReconnect(connection) {
+        console.log('Controller.#onConnectionReconnect');
+        document.getElementById('messages').value += '**Connection Reconnected.\n';
+      }
+
+      #onConnectionClose(connection) {
+        console.log('Controller.#onConnectionClose');
+        document.getElementById('messages').value += '**Connection Closed.\n';
+
+        const store = new BrowserConnectionStore();
+        store.deleteConnection();
       }
 
     } // class Controller
