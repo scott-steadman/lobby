@@ -51,16 +51,24 @@
     class Connection {
 
       constructor() {
-        const configuration = { iceServers: [{'urls': [
+        this.configuration = { iceServers: [{'urls': [
                                                         'stun:stun.l.google.com:19302',
                                                       ]
                                             }],
                               };
 
         this.protocolVersion = 1;
-        this.peerConnection = new RTCPeerConnection(configuration);
+        this.debugEnabled    = true;
+        this.state           = 'new';
 
-        this.debugEnabled = false;
+        this.#createConnection();
+        this.#createDataChannel();
+      } // constructor
+
+      #createConnection() {
+        this.peerConnection  = new RTCPeerConnection(this.configuration);
+        this.iceCandidates   = [];
+
         if(this.debugEnabled) {
           this.peerConnection.addEventListener('addstream', this.dumpEvent);
           this.peerConnection.addEventListener('connectionstatechange', this.dumpEvent);
@@ -75,17 +83,23 @@
           this.peerConnection.addEventListener('track', this.dumpEvent);
         }
 
-        // called when a datachannel is added by the other peer
+        // invoked when we or the other peer creates a data channel
         this.peerConnection.addEventListener('datachannel', (event) => {
-          console.log('datachannel event:', event);
-          this.channel = event.channel;
-          this.#addChannelListeners();
-        });
+          console.log('datachannel event:', this.channel.id, event.channel.id, event);
 
+          // We only need one channel.
+          if(this.channel.id > event.channel.id) {
+            this.channel.close();
+            this.channel = event.channel;
+            this.#addChannelListeners();
+          }
+        });
+      } // #createConnection
+
+      #createDataChannel() {
         this.channel = this.peerConnection.createDataChannel('connectionChannel', {reliable: true});
         this.#addChannelListeners();
-
-     } // constructor
+      }
 
       #addChannelListeners() {
         if(this.debugEnabled) {
@@ -98,24 +112,38 @@
         }
 
         this.channel.addEventListener('open', (event) => {
-          console.log('channel open:', event);
-          document.getElementById('messages').value = '**Channel Opened.\n';
+          console.log('channel open:', event.target.id, event);
+
+          switch(this.state) {
+            case 'new':
+              this.state = 'open';
+              if(this.onOpenCallback) this.onOpenCallback(this);
+              break;
+            case 'closing':
+              this.state = 'open';
+              if(this.onReconnectCallback) this.onReconnectCallback(this);
+              break;
+            default:
+              console.log('Connection.#addChannelListeners unhandled state:', this.state);
+          }
         });
 
         this.channel.addEventListener('message', (event) => {
-          console.log('Connection.onMessage:', event);
+          console.log('channel message:', event.target.id, event);
           const data = JSON.parse(event.data);
           if(this.onMessageCallback) this.onMessageCallback(data);
         });
 
         this.channel.addEventListener('closing', (event) => {
-          console.log('channel closing:', event);
-          document.getElementById('messages').value += '**Channel Closing...\n';
+          console.log('channel closing:', event.target.id, event);
+          this.state = 'closing';
+          if (this.onDisconnectCallback) this.onDisconnectCallback(this);
         });
 
         this.channel.addEventListener('closed', (event) => {
-          console.log('channel closed:', event);
-          document.getElementById('messages').value += '**Channel Closed.\n';
+          console.log('channel closed:', event.target.id, event);
+          this.state = 'closed';
+          if(this.onConnectionClose) this.onConnectionClose(this);
         });
       }
 
