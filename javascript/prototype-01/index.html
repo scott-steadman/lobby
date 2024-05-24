@@ -40,6 +40,8 @@
       <div>
         <input id="new_message" type="text">
         <button onClick="window.controller.sendMessage();">Send</button>
+        <button onClick="window.controller.sendMessage('Ping');">Ping</button>
+        <button onClick="window.controller.sendMessage('Pong');">Pong</button>
       </div>
     </div>
   </body>
@@ -328,10 +330,10 @@
         this.connection.acceptResponse(response);
       }
 
-      sendMessage(){
-        const message = document.getElementById('new_message').value;
+      sendMessage(message) {
+        message = message || document.getElementById('new_message').value;
         document.getElementById('new_message').value = '';
-        console.debug('sendMessage:', message);
+        console.log('Controller.sendMessage:', message);
         document.getElementById('messages').value += `Me: ${message}\n`;
         this.connection.sendMessage(message);
       }
