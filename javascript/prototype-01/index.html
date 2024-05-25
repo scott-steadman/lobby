@@ -4,33 +4,30 @@
   <body>
     <h1>Connection Prototype</h1>
 
-    <div id="create_request_panel">
-      <button id='create_request_button' onClick="window.controller.createRequest();">Create Connection Request</button>
-      <span id='request_span' style="display:none;">
-        Copy join token image and send to host: <img id="connection_request_img"/>
-     </table>
+    <div id="connection_panel">
+      <div id="create_request_panel">
+        <button id='create_request_button' onClick="window.controller.createRequest();">Create Connection Request</button>
+        <span id='request_span' style="display:none;">
+          Copy join token image and send to host: <img id="connection_request_img"/>
+      </table>
+      </div>
+
+      <div id="accept_request_panel">
+        <span id="accept_request_span">
+          Paste join token image here: <input id="request_to_accept" size="1" style="border:2px solid black"/>
+        </span>
+        <span id="request_response" style="visibility:hidden">
+          Copy this accept token and send to participant: <img id="response_to_send_img"/>
+        </span>
+      </div>
+
+      <div id="accept_response_panel" style="visibility:hidden">
+        <span id="accept_response">
+          Paste accept token image here: <input id="response_to_accept"  size="1" style="border:2px solid black"/>
+        </span>
+      </div>
+      <hr/>
     </div>
-
-    <hr/>
-
-    <div>
-      <span id="accept_request_panel">
-        Paste join token image here: <input id="request_to_accept" size="1" style="border:2px solid black"/>
-      </span>
-      <span id="request_response" style="visibility:hidden">
-        Copy this accept token and send to participant: <img id="response_to_send_img"/>
-      </span>
-    </div>
-
-    <hr/>
-
-    <div id="accept_response_panel">
-      <span id="accept_response">
-        Paste accept token image here: <input id="response_to_accept"  size="1" style="border:2px solid black"/>
-      </span>
-    </div>
-
-    <hr/>
 
     <div id="message_panel">
       <h2>Messages</h2>
@@ -308,8 +305,46 @@
 
       start() {
         this.#bindElements()
-        this.#createConnection();
+        this.#resetConnectionPanel();
       }
+
+      createRequest() {
+        this.#createConnection();
+        this.connection.createRequest().then((request) => {
+          console.log('Controller.createRequest');
+          document.getElementById('create_request_button').style.display = 'none';
+          document.getElementById('request_span').style.display = 'inline';
+          document.getElementById('connection_request_img').src = Utils.encodeToBMP(JSON.stringify(request));
+          this.#hideAcceptRequestPanel()
+          this.#resetAcceptResponsePanel()
+        });
+      }
+
+      acceptRequest(text) {
+        const request = JSON.parse(text);
+        this.#createConnection();
+        this.connection.acceptRequest(request).then((response) => {
+          console.log('Controller.#requestAccepted');
+          document.getElementById('accept_request_span').style.display = 'none';
+          document.getElementById('request_response').style.visibility = 'visible';
+          document.getElementById('response_to_send_img').src = Utils.encodeToBMP(JSON.stringify(response));
+        });
+      }
+
+      acceptResponse(text) {
+        const response = JSON.parse(text);
+        this.connection.acceptResponse(response);
+      }
+
+      sendMessage(message) {
+        message = message || document.getElementById('new_message').value;
+        document.getElementById('new_message').value = '';
+        console.log('Controller.sendMessage:', message);
+        document.getElementById('messages').value += `Me: ${message}\n`;
+        this.connection.sendMessage(message);
+      }
+
+    // private functions
 
       #createConnection() {
         this.connection = new Connection();
@@ -368,43 +403,27 @@
         });
       }
 
-      createRequest() {
-        this.connection.createRequest().then((request) => {
-          console.log('Controller.createRequest');
-          document.getElementById('create_request_button').style.display = 'none';
-          document.getElementById('request_span').style.display = 'block';
-          document.getElementById('connection_request_img').src = Utils.encodeToBMP(JSON.stringify(request));
-        });
-      }
-
-      acceptRequest(text) {
-        const request = JSON.parse(text);
-        this.connection.acceptRequest(request).then((response) => {
-          console.log('Controller.#requestAccepted');
-          document.getElementById('accept_request_panel').style.display = 'none';
-          document.getElementById('request_response').style.visibility = 'visible';
-          document.getElementById('response_to_send_img').src = Utils.encodeToBMP(JSON.stringify(response));
-        });
-      }
-
-      acceptResponse(text) {
-        const response = JSON.parse(text);
-        this.connection.acceptResponse(response);
-      }
-
-      sendMessage(message) {
-        message = message || document.getElementById('new_message').value;
-        document.getElementById('new_message').value = '';
-        console.log('Controller.sendMessage:', message);
-        document.getElementById('messages').value += `Me: ${message}\n`;
-        this.connection.sendMessage(message);
-      }
-
-    // private functions
-
       #onConnectionOpen(connection) {
         console.log('Controller.#onConnectionOpen');
         document.getElementById('messages').value = '**Connection Opened.\n';
+        window.controller.#hideConnectionPanel();
+      }
+
+      #hideConnectionPanel() {
+        document.getElementById('connection_panel').style.display = 'none';
+      }
+
+      #resetConnectionPanel() {
+        document.getElementById('connection_panel').style.display = 'block';
+        this.#resetCreateRequestPanel();
+        this.#resetAcceptRequestPanel()
+        this.#hideAcceptResponsePanel()
+      }
+
+      #resetCreateRequestPanel() {
+        document.getElementById('create_request_panel').style.display = 'block';
+        document.getElementById('create_request_button').style.display = 'inline';
+        document.getElementById('request_span').style.display = 'none';
       }
 
       #onConnectionMessage(message) {
@@ -415,6 +434,17 @@
       #onConnectionDisconnect(connection) {
         console.log('Controller.#onConnectionDisconnect');
         document.getElementById('messages').value += '**Connection Disconnected.\n';
+        window.controller.#resetConnectionPanel();
+      }
+
+      #hideAcceptRequestPanel() {
+        document.getElementById('accept_request_panel').style.display = 'none';
+      }
+
+      #resetAcceptRequestPanel() {
+        document.getElementById('accept_request_panel').style.display = 'block';
+        document.getElementById('accept_request_span').style.display = 'inline';
+        document.getElementById('request_response').style.visibility = 'hidden';
       }
 
       #onConnectionReconnect(connection) {
@@ -425,6 +455,14 @@
       #onConnectionClose(connection) {
         console.log('Controller.#onConnectionClose');
         document.getElementById('messages').value += '**Connection Closed.\n';
+      }
+
+      #hideAcceptResponsePanel() {
+        document.getElementById('accept_response_panel').style.visibility = 'hidden';
+      }
+
+      #resetAcceptResponsePanel() {
+        document.getElementById('accept_response_panel').style.visibility = 'visible';
       }
 
     } // class Controller
