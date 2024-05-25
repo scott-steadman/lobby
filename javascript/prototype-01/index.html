@@ -45,10 +45,19 @@
 
   <script language='JavaScript'>
 
-    // handles the connection between two peers
-    class Connection {
+    /*
+     * This class handles the connection between two peers
+     *
+     * It dispatches the following events:
+     *  open        => when the connection is established
+     *  message     => when a message is received
+     *  disconnect  => when the connection is lost
+     *  close       => when the connection is closed
+     */
+    class Connection extends EventTarget {
 
       constructor() {
+        super();
         this.configuration = { iceServers: [{'urls': [
                                                         'stun:stun.l.google.com:19302',
                                                       ]
@@ -57,7 +66,7 @@
 
         this.protocolVersion = 1;
         this.debugEnabled    = true;
-        this.state           = 'new';
+        this.events
 
         this.#createConnection();
         this.#createDataChannel();
@@ -111,37 +120,23 @@
 
         this.channel.addEventListener('open', (event) => {
           console.log('channel open:', event.target.id, event);
-
-          switch(this.state) {
-            case 'new':
-              this.state = 'open';
-              if(this.onOpenCallback) this.onOpenCallback(this);
-              break;
-            case 'closing':
-              this.state = 'open';
-              if(this.onReconnectCallback) this.onReconnectCallback(this);
-              break;
-            default:
-              console.log('Connection.#addChannelListeners unhandled state:', this.state);
-          }
+          this.dispatchEvent(new Event('open'));
         });
 
         this.channel.addEventListener('message', (event) => {
           console.log('channel message:', event.target.id, event);
           const data = JSON.parse(event.data);
-          if(this.onMessageCallback) this.onMessageCallback(data);
+          this.dispatchEvent(new CustomEvent('message', {detail: data}));
         });
 
         this.channel.addEventListener('closing', (event) => {
           console.log('channel closing:', event.target.id, event);
-          this.state = 'closing';
-          if (this.onDisconnectCallback) this.onDisconnectCallback(this);
+          this.dispatchEvent(new Event('disconnect'));
         });
 
         this.channel.addEventListener('closed', (event) => {
           console.log('channel closed:', event.target.id, event);
-          this.state = 'closed';
-          if(this.onConnectionClose) this.onConnectionClose(this);
+          this.dispatchEvent(new Event('close'));
         });
       }
 
@@ -213,34 +208,6 @@
           timestamp: new Date().toISOString()
         };
         this.channel.send(JSON.stringify(data));
-      }
-
-      /*
-       * TODO: See about implementing these callbacks as event listeners
-       *
-       * Perhaps the following:
-       *  addOnOpenCallback(callback)
-       *  addEventListener('open', callback)
-       *
-       */
-      addOnOpenCallback(callback) {
-        this.onOpenCallback = callback;
-      }
-
-      onMessage(callback) {
-        this.onMessageCallback = callback;
-      }
-
-      onDisconnect(callback) {
-        this.onDisconnectCallback = callback;
-      }
-
-      onReconnect(callback) {
-        this.onReconnectCallback = callback;
-      }
-
-      onClose(callback) {
-        this.onCloseCallback = callback;
       }
 
     } // class Connection
@@ -349,11 +316,10 @@
       #createConnection() {
         this.connection = new Connection();
 
-        this.connection.addOnOpenCallback(this.#onConnectionOpen);
-        this.connection.onMessage(this.#onConnectionMessage);
-        this.connection.onDisconnect(this.#onConnectionDisconnect);
-        this.connection.onReconnect(this.#onConnectionReconnect);
-        this.connection.onClose(this.#onConnectionClose);
+        this.connection.addEventListener('open', (event) => this.#handleConnectionOpen(event));
+        this.connection.addEventListener('message', (event) => this.#handleConnectionMessage(event));
+        this.connection.addEventListener('disconnect', (event) => this.#handleConnectionDisconnect(event));
+        this.connection.addEventListener('close', (event) => this.#handleConnectionClose(event));
       }
 
       #bindElements() {
@@ -403,10 +369,30 @@
         });
       }
 
-      #onConnectionOpen(connection) {
-        console.log('Controller.#onConnectionOpen');
+      #handleConnectionOpen(event) {
+        console.log('Controller.#handleConnectionOpen', event);
+        const connection = event.target;
         document.getElementById('messages').value = '**Connection Opened.\n';
         window.controller.#hideConnectionPanel();
+      }
+
+      #handleConnectionMessage(event) {
+        console.log('Controller.#handleConnectionMessage', event);
+        const message = event.detail;
+        document.getElementById('messages').value += `They: ${message.message} ${message.timestamp}\n`;
+      }
+
+      #handleConnectionDisconnect(event) {
+        console.log('Controller.#handleConnectionDisconnect', event);
+        const connection = event.target;
+        document.getElementById('messages').value += '**Connection Disconnected.\n';
+        window.controller.#resetConnectionPanel();
+      }
+
+      #handleConnectionClose(event) {
+        console.log('Controller.#handleConnectionClose', event);
+        const connection = event.target;
+        document.getElementById('messages').value += '**Connection Closed.\n';
       }
 
       #hideConnectionPanel() {
@@ -426,17 +412,6 @@
         document.getElementById('request_span').style.display = 'none';
       }
 
-      #onConnectionMessage(message) {
-        console.log('Controller.#onConnectionMessage', message);
-        document.getElementById('messages').value += `They: ${message.message} ${message.timestamp}\n`;
-      }
-
-      #onConnectionDisconnect(connection) {
-        console.log('Controller.#onConnectionDisconnect');
-        document.getElementById('messages').value += '**Connection Disconnected.\n';
-        window.controller.#resetConnectionPanel();
-      }
-
       #hideAcceptRequestPanel() {
         document.getElementById('accept_request_panel').style.display = 'none';
       }
@@ -445,16 +420,6 @@
         document.getElementById('accept_request_panel').style.display = 'block';
         document.getElementById('accept_request_span').style.display = 'inline';
         document.getElementById('request_response').style.visibility = 'hidden';
-      }
-
-      #onConnectionReconnect(connection) {
-        console.log('Controller.#onConnectionReconnect');
-        document.getElementById('messages').value += '**Connection Reconnected.\n';
-      }
-
-      #onConnectionClose(connection) {
-        console.log('Controller.#onConnectionClose');
-        document.getElementById('messages').value += '**Connection Closed.\n';
       }
 
       #hideAcceptResponsePanel() {
