@@ -48,32 +48,6 @@
 
   <script language='JavaScript'>
 
-    // stores connetion information in the event of a page reload
-    class BrowserConnectionStore {
-
-      constructor() {
-        this.store = window.localStorage;
-      }
-
-      saveConnection(connection) {
-        this.store.setItem('connection', connection.serialize());
-      }
-
-      loadConnection() {
-return null;
-        const payload = this.store.getItem('connection');
-        if(payload) {
-          return new Connection().deserialize(payload);
-        }
-        return null;
-      }
-
-      deleteConnection() {
-        this.store.removeItem('connection');
-      }
-
-    } // class BrowserConnectionStore
-
     // handles the connection between two peers
     class Connection {
 
@@ -244,37 +218,6 @@ return null;
         this.channel.send(JSON.stringify(data));
       }
 
-      serialize() {
-        const payload = {
-          state:         this.state,
-          local:         this.peerConnection.currentLocalDescription,
-          remote:        this.peerConnection.currentRemoteDescription,
-        };
-
-        console.log('serialize', payload);
-
-        return JSON.stringify(payload);
-      }
-
-      deserialize(serialized) {
-        const payload = JSON.parse(serialized);
-        console.log('deserialize', payload);
-
-        this.state = payload.state;
-
-this.acceptRequest({request: payload.remote.sdp});
-return this;
-        this.peerConnection.setLocalDescription(payload.local).then(() => {
-          console.log('Connection.deserialize setLocalDescription', arguments);
-        }).catch((error) => {
-          console.log('Connection.deserialize setLocalDescription error', error);
-        });
-//          this.peerConnection.setLocalDescription(offer);
-//          this.peerConnection.setRemoteDescription(new RTCSessionDescription(payload.remote));
-
-        return this;
-      }
-
       /*
        * TODO: See about implementing these callbacks as event listeners
        *
@@ -369,15 +312,7 @@ return this;
       }
 
       #createConnection() {
-        const store = new BrowserConnectionStore();
-
-        this.connection = store.loadConnection();
-        if(this.connection) {
-          console.log('restored connection');
-        } else {
-          console.log('creating connection');
-          this.connection = new Connection();
-        }
+        this.connection = new Connection();
 
         this.connection.addOnOpenCallback(this.#onConnectionOpen);
         this.connection.onMessage(this.#onConnectionMessage);
@@ -470,9 +405,6 @@ return this;
       #onConnectionOpen(connection) {
         console.log('Controller.#onConnectionOpen');
         document.getElementById('messages').value = '**Connection Opened.\n';
-
-        const store = new BrowserConnectionStore();
-        store.saveConnection(connection);
       }
 
       #onConnectionMessage(message) {
@@ -493,9 +425,6 @@ return this;
       #onConnectionClose(connection) {
         console.log('Controller.#onConnectionClose');
         document.getElementById('messages').value += '**Connection Closed.\n';
-
-        const store = new BrowserConnectionStore();
-        store.deleteConnection();
       }
 
     } // class Controller
