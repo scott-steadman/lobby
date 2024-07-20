@@ -2,7 +2,7 @@
   <head>
   </head>
   <body>
-    <h1>Connection Prototype</h1>
+    <h1>Prototype 01</h1>
 
     <div id="connection_panel">
       <div id="create_request_panel">
@@ -313,6 +313,15 @@
 
     // private functions
 
+      #preventPageUnload() {
+console.log('preventing page unload');
+        window.addEventListener('beforeunload', (event) => {
+console.log('Closing the page will disconnect you.');
+          event.preventDefault();
+          event.returnValue = '';
+        });
+      }
+
       #createConnection() {
         this.connection = new Connection();
 
@@ -374,6 +383,7 @@
         const connection = event.target;
         document.getElementById('messages').value = '**Connection Opened.\n';
         window.controller.#hideConnectionPanel();
+        window.controller.#preventPageUnload();
       }
 
       #handleConnectionMessage(event) {
