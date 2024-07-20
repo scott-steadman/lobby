@@ -1,5 +1,10 @@
 # Lobby Prototype 1
 
+Problem: I don't want to have to run a server in order to support my lobby.
+
+Experiment: Can I set up a WebRTC connection by using copy/paste via chat app (eg Discord)
+to create a WebRTC connection.
+
 ## To run
 
 ```sh
