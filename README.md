@@ -6,3 +6,6 @@ A lobby implementation I can reuse across applications.
 
 I'm putting this on hold for now. I want to see if I can use
 discord activities as a lobby.
+
+## Notes
+[WebRTC for the curiuos](https://webrtcforthecurious.com/)
